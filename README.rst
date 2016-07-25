@@ -1,6 +1,9 @@
 TranslationsClient
 ==================
 
+.. image:: https://api.travis-ci.org/GreenelyAB/TranslationsClient.svg?branch=master
+    :target: https://travis-ci.org/GreenelyAB/TranslationsClient?branch=master
+
 A translation service client.
 
 
