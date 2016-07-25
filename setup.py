@@ -18,7 +18,6 @@ setup(
     author="GreenelyAB",
     author_email="info@greenely.com",
     license="MIT",
-
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
@@ -30,9 +29,9 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.5",
     ],
-
     keywords="translation translations client internationalization",
     packages=find_packages("src", exclude=["tests"]),
+    package_dir = {"": "src"},
     install_requires=["pyzmq>=15.2.0"],
     extras_require={
     },
