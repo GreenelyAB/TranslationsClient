@@ -6,6 +6,7 @@ from uuid import uuid4
 from zmq import Context, DEALER, Poller, POLLIN, LINGER
 from itertools import chain
 
+from .cache import TranslationCache
 
 _LOG = getLogger(__name__)
 
@@ -21,7 +22,8 @@ class TranslationsClient():
     Not thread safe! Create and use one instance per thread.
     """
 
-    def __init__(self, server_host, server_port, timeout=3, encoding="utf-8"):
+    def __init__(self, server_host, server_port, timeout=3, encoding="utf-8",
+                 skip_translations=False, translation_cache=None):
         """ Create a client instance which can be used to get translations.
 
         A client will close all resources on exit. If resource should be freed
@@ -42,6 +44,14 @@ class TranslationsClient():
         self._socket.connect("tcp://{}:{}".format(server_host, server_port))
         self._poller = Poller()
         self._poller.register(self._socket, POLLIN)
+        self._skip_translations = skip_translations
+
+        self._translation_cache = translation_cache
+
+        if self._translation_cache and not isinstance(
+                self._translation_cache, TranslationCache):
+            raise TypeError(
+                "The cache needs to be a subclass of TranslationCache")
 
     def _handle_response(self, req_id, response):
         """ Check the response and extract the translations.
@@ -120,3 +130,66 @@ class TranslationsClient():
             self._socket = None
             self._context.term()
             self._context = None
+
+    def translate(self, language, country, *keys):
+        """ Translate strings with or without their plural flavor.
+
+        :param language: str
+        :param country: str
+        :type keys: [str or (str, int)]
+        :rtype: str or [str]
+        """
+
+        if self._skip_translations:
+            translations = [k if isinstance(k, str) else k[0] for k in keys]
+            return translations if len(translations) > 1 else translations[0]
+
+        if not self._translation_cache:
+            return self.get(language, country, *keys)
+
+        translations = self._translation_cache.get_multiple(
+            language, country, keys)
+
+        if all(translations):
+            return translations if len(keys) > 1 else translations[0]
+
+        # Give all the to be translated things an ordering index
+        ordered_translations = list(
+            zip(range(len(translations)), keys, translations))
+
+        # Split of the keys that do not have a translation
+        indexed_missing_keys = [
+            (idx, key) for idx, key, translation in ordered_translations
+            if translation is None
+        ]
+
+        idx = [idx for idx, key in indexed_missing_keys]
+        new_keys = [key for idx, key in indexed_missing_keys]
+
+        missing_translations = self.get(language, country, *new_keys)
+        if not isinstance(missing_translations, (list, tuple)):
+            missing_translations = [missing_translations]
+
+        self._translation_cache.set_multiple(
+            language, country, new_keys, missing_translations)
+
+        missing_translations = list(zip(idx, missing_translations))
+        present_translations = [
+            (idx, translation) for idx, key, translation in
+            ordered_translations]
+
+        final_translations = dict(present_translations)
+        final_translations.update(dict(missing_translations))
+        final_translations = sorted(final_translations.items(),
+                                    key=lambda x: x[0])
+
+        translations = [e[1] for e in final_translations]
+        return translations if len(keys) > 1 else translations[0]
+
+    def translate_closure(self, language, country):
+        """ Returns a function that encloses the language and the country for
+            this particular translation client
+        """
+        def _t(*keys):
+            return self.translate(language, country, *keys)
+        return _t
