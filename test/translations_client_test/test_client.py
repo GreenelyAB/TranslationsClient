@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from threading import Thread
+from unittest import mock
 from unittest.case import TestCase
 
 from zmq import Context, REP, LINGER, Poller, POLLIN
 
 from translations_client import TranslationsClient, TranslationsServerError
-
+from translations_client.cache import DictTimeoutTranslationCache
 
 _KEY1 = "k1"
 
@@ -80,7 +81,7 @@ class TestClient(TestCase):
             if client is None:
                 client = TranslationsClient(_HOST, _PORT)
             try:
-                return client.get(*request)
+                return client.translate(*request)
             finally:
                 if close_client:
                     client.close()
@@ -130,3 +131,47 @@ class TestClient(TestCase):
         self.assertEqual(
             [r.decode(_ENCODING) for r in self._client_request],
             [_LANGUAGE, _COUNTRY, _KEY1, str(_PLURAL1), _KEY2, ""])
+
+    def test_with_cache_active(self):
+        """ Test's that the response is correct when using the cache """
+        client = TranslationsClient(
+            _HOST, _PORT, timeout=0,
+            translation_cache=DictTimeoutTranslationCache())
+
+        translation = self._request(
+            None, _LANGUAGE, _COUNTRY, (_KEY1, _PLURAL1), client=client)
+        self.assertEqual(translation, _KEY1)
+
+        client.get = mock.MagicMock()
+
+        translation = self._request(
+            None, _LANGUAGE, _COUNTRY, (_KEY1, _PLURAL1), client=client)
+        self.assertEqual(translation, _KEY1)
+
+        client.get.assert_not_called()
+
+    def test_with_skip_translations(self):
+        """ Test that the server call is not made on skip translations """
+        client = TranslationsClient(
+            _HOST, _PORT, timeout=0, skip_translations=True)
+
+        client.get = mock.MagicMock()
+
+        translation = self._request(
+            None, _LANGUAGE, _COUNTRY, (_KEY1, _PLURAL1), client=client)
+        self.assertEqual(translation, _KEY1)
+
+        client.get.assert_not_called()
+
+    def test_translation_closure(self):
+        """ Test that the server call is not made on skip translations """
+        client = TranslationsClient(_HOST, _PORT, timeout=0)
+
+        client.get = mock.MagicMock()
+
+        _translate_closure = client.translate_closure(_LANGUAGE, _COUNTRY)
+
+        _translate_closure((_KEY1, _PLURAL1),)
+
+        client.get.assert_called_once_with(
+            _LANGUAGE, _COUNTRY, (_KEY1, _PLURAL1))
