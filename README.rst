@@ -27,6 +27,7 @@ Usage example
 The translation service client also allows the injection of a cache.
 
 ::
+
     >>> from translations_client import TranslationsClient
     >>> from translations_client import  DictTimeoutTranslationCache
     >>> client = TranslationsClient("127.0.0.1", 5512, translation_cache=DictTimeoutTranslationCache())
@@ -37,6 +38,7 @@ The translation service client also allows the injection of a cache.
 And furthermore the skip of translations for testing and other use cases.
 
 ::
+
     >>> from translations_client import TranslationsClient
     >>> client = TranslationsClient("127.0.0.1", 5512, skip_translations=True)
     >>> print(client.get("se", None, "I have many"))
